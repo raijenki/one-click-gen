@@ -25,6 +25,7 @@ string(STR_DB_SYMBOL) kChan; // K Channel
 string(STR_DB_SYMBOL) thChan; // Th Channel
 string(STR_DB_SYMBOL) uChan; // U Channel
 string(STR_DEFAULT_LONG) sCS; // grid cell size
+string(STR_FILE) sWorkDir, sWorhDir; // directory
 
 int i; // aux var
 int iRunMode; // for v0.2 with 'advanced' menu
@@ -56,71 +57,90 @@ LST UList;    // U list
         iRunMode = MODE_NORMAL;
     }
 
+   // Get the current project database directory 
+   GetString_SYS("GAMAGEN", "PROJECT_DIR", sWorkDir);
+   if (!iStrlen_STR(sWorkDir) || !iDirExist_SYS(sWorkDir)) {
+      GetDirectory_SYS(SYS_DIR_LOCAL, sWorkDir);  // default to workspace directory
+   }
+   // Ensure that sWorkDir ends with a path separator
+   Strcpy_STR(sDirSeparatorChar, "\\");
+   if (iCharN_STR(sWorkDir, iStrlen_STR(sWorkDir) - 1) != iCharN_STR(sDirSeparatorChar, 0)) {
+      Strcat_STR(sWorkDir, "\\");
+   }
+
     // "Are we running iteractively?" IDK what this actually means. Geosoft babble.
-    if (iRunMode == MODE_NORMAL) {
-        if (iInteractive_SYS()) {
-            i = 1;
-            while(i!=0) {
+    if (iInteractive_SYS()) {
+        i = 1;
+        while(i!=0) {
+            /////////////////
+            // Normal mode //
+            /////////////////
 
-                // Normal mode
-                case 1:
-                // Create the dialogue
-                Diag = Create_DGW("GAMAFORM0");
-                // Set up lists
-                TCList = GetList_DGW(Diag, _GAMAFORM0_0);
-                KList = GetList_DGW(Diag, _GAMAFORM0_1);
-                ThList = GetList_DGW(Diag, _GAMAFORM0_2);
-                UList = GetList_DGW(Diag, _GAMAFORM0_2);
-                // Symbolic link list -> db
-                SymbLST_DB(Data, TCList, DB_SYMB_CHAN);
-                SymbLST_DB(Data, KList, DB_SYMB_CHAN);
-                SymbLST_DB(Data, ThList, DB_SYMB_CHAN);
-                SymbLST_DB(Data, UList, DB_SYMB_CHAN);
-                // Sort lists in alphabetical order
-                Sort_LST(TCList, 0, 0);
-                Sort_LST(KList, 0, 0);
-                Sort_LST(ThList, 0, 0);
-                Sort_LST(UList, 0, 0);
+            case 1: 
+            // Create the dialogue
+            Diag = Create_DGW("GAMAFORM0");
+            // Set up lists
+            TCList = GetList_DGW(Diag, _GAMAFORM0_0);
+            KList = GetList_DGW(Diag, _GAMAFORM0_1);
+            ThList = GetList_DGW(Diag, _GAMAFORM0_2);
+            UList = GetList_DGW(Diag, _GAMAFORM0_2);
+            // Symbolic link list -> db
+            SymbLST_DB(Data, TCList, DB_SYMB_CHAN);
+            SymbLST_DB(Data, KList, DB_SYMB_CHAN);
+            SymbLST_DB(Data, ThList, DB_SYMB_CHAN);
+            SymbLST_DB(Data, UList, DB_SYMB_CHAN);
+            // Sort lists in alphabetical order
+            Sort_LST(TCList, 0, 0);
+            Sort_LST(KList, 0, 0);
+            Sort_LST(ThList, 0, 0);
+            Sort_LST(UList, 0, 0);
 
-                // Set any defaults from INI
-                SetInfoSYS_DGW(Diag, _BIGRID0_0, DGW_TEXT, "GAMAGEN", "TCCHAN");
-                SetInfoSYS_DGW(Diag, _BIGRID0_1, DGW_TEXT, "GAMAGEN", "KCHAN");
-                SetInfoSYS_DGW(Diag, _BIGRID0_2, DGW_TEXT, "GAMAGEN", "THCHAN");
-                SetInfoSYS_DGW(Diag, _BIGRID0_3, DGW_TEXT, "GAMAGEN", "UCHAN");
-                SetInfoSYS_DGW(Diag, _BIGRID0_4, DGW_FILEPATH, "GAMAGEN", "PATH");
-                SetInfoSYS_DGW(Diag, _BIGRID0_5, DGW_TEXT, "GAMAGEN", "CS");
+            // Set any defaults from INI
+            SetInfoSYS_DGW(Diag, _GAMAFORM0_0, DGW_TEXT, "GAMAGEN", "TCCHAN");
+            SetInfoSYS_DGW(Diag, _GAMAFORM0_1, DGW_TEXT, "GAMAGEN", "KCHAN");
+            SetInfoSYS_DGW(Diag, _GAMAFORM0_2, DGW_TEXT, "GAMAGEN", "THCHAN");
+            SetInfoSYS_DGW(Diag, _GAMAFORM0_3, DGW_TEXT, "GAMAGEN", "UCHAN");
+            SetInfo_DGW(Diag, _GAMAFORM0_4, DGW_TEXT, sWorkDir);
+            SetInfoSYS_DGW(Diag, _GAMAFORM0_5, DGW_TEXT, "GAMAGEN", "CS");
 
-                // Run the dialog
-                i = iRunDialogue_DGW(Diag);
-                if (i == -1) Cancel_SYS();
+            // Run the dialog
+            i = iRunDialogue_DGW(Diag);
+            if (i==-1) Cancel_SYS();
 
-                // Put values back in INI 
-                GetInfoSYS_DGW(Diag, _BIGRID0_0, DGW_TEXT, "GAMAGEN", "TCCHAN");
-                GetInfoSYS_DGW(Diag, _BIGRID0_1, DGW_TEXT, "GAMAGEN", "KCHAN");
-                GetInfoSYS_DGW(Diag, _BIGRID0_2, DGW_TEXT, "GAMAGEN", "THCHAN");
-                GetInfoSYS_DGW(Diag, _BIGRID0_3, DGW_TEXT, "GAMAGEN", "UCHAN");
-                GetInfoSYS_DGW(Diag, _BIGRID0_4, DGW_FILEPATH, "GAMAGEN", "PATH");
-                GetInfoSYS_DGW(Diag, _BIGRID0_5, DGW_TEXT, "GAMAGEN", "CS");
-
-                Destroy_DGW(Diag);
-                break;
-
-                // Adv version w/ options- TBD 
-                case 2:
-                DisplayMessage_SYS(_("Lost"), _("I'm lost"));
-                i = 0;
-                break;
-
-                // Error
-                default:
-                DisplayMessage_SYS(_("Lost"), _("I'm lost"));
-                i = 0;
-                break;
-
+            if (i==3) {
+                iBrowseDir_GUI(_("Select output directory"), sWorkDir, sWorkDir);
+                continue;
             }
-    if (iRunMode == MODE_OPTIONS) {
+
+            // Put values back in INI 
+            GetInfoSYS_DGW(Diag, _GAMAFORM0_0, DGW_TEXT, "GAMAGEN", "TCCHAN");
+            GetInfoSYS_DGW(Diag, _GAMAFORM0_1, DGW_TEXT, "GAMAGEN", "KCHAN");
+            GetInfoSYS_DGW(Diag, _GAMAFORM0_2, DGW_TEXT, "GAMAGEN", "THCHAN");
+            GetInfoSYS_DGW(Diag, _GAMAFORM0_3, DGW_TEXT, "GAMAGEN", "UCHAN");
+            GetInfoSYS_DGW(Diag, _GAMAFORM0_5, DGW_TEXT, "GAMAGEN", "CS");
+
+            Destroy_DGW(Diag);
+            break;
+
+            //////////////
+            // Adv Mode // TBD
+            //////////////
+
+            case 2:
+            DisplayMessage_SYS(_("Lost"), _("I'm lost"));
+            i = 0;
+            break;
+
+            // Error (default)
+            default:
+            DisplayMessage_SYS(_("Lost"), _("I'm lost"));
+            i = 0;
+            break;
         }
     }
+    
+
+    
 
 
     // Release database
