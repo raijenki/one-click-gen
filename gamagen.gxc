@@ -1,0 +1,128 @@
+NAME          = "One-click Gamaspectometric Map Generator"
+
+DESCRIPTION   = "
+      This generator uses bigrid as base.  
+"
+
+// Revision History:
+// v0.1: Actually generates grids and export maps.
+
+RESOURCE = "gamagen.gr"
+
+#include <version.gxh>
+#include "gamagen.grh"
+#include <all.gxh>
+
+/////////////////////
+//   Global vars   //
+/////////////////////
+#define MODE_NORMAL 0;
+#define MODE_OPTIONS 1; // for v0.2 with 'advanced' menu
+
+string(STR_FILE) gridPath; // Output path
+string(STR_DB_SYMBOL) tcChan; // Total Count Channel
+string(STR_DB_SYMBOL) kChan; // K Channel
+string(STR_DB_SYMBOL) thChan; // Th Channel
+string(STR_DB_SYMBOL) uChan; // U Channel
+string(STR_DEFAULT_LONG) sCS; // grid cell size
+
+int i; // aux var
+int iRunMode; // for v0.2 with 'advanced' menu
+
+EDB EData; // Database handle
+DB Data;  // Database
+LST TCList;    // TC channel list
+LST KList;    // K list
+LST ThList;    // Th list
+LST UList;    // U list
+
+
+//////////////
+// Gen Code //
+//////////////
+
+{
+    // Get database (gamma)
+    EDATA = Current_EDB();
+    // Lock database 
+    Data = Lock_EDB(EData);
+    // Looks like iGetInt_SYS and SetInt_SYS works as INI; got this from original BIGRID code
+    // This should be set everytime to normal behaviour
+    iRunMode = iGetInt_SYS("GAMAGEN", "RUNMODE");
+    SetInt_SYS("GAMAGEN", "RUNMODE", 0);
+
+    // Sanity check to default behaviour
+    if (iRunMode != MODE_OPTIONS) { 
+        iRunMode = MODE_NORMAL;
+    }
+
+    // "Are we running iteractively?" IDK what this actually means. Geosoft babble.
+    if (iRunMode == MODE_NORMAL) {
+        if (iInteractive_SYS()) {
+            i = 1;
+            while(i!=0) {
+
+                // Normal mode
+                case 1:
+                // Create the dialogue
+                Diag = Create_DGW("GAMAFORM0");
+                // Set up lists
+                TCList = GetList_DGW(Diag, _GAMAFORM0_0);
+                KList = GetList_DGW(Diag, _GAMAFORM0_1);
+                ThList = GetList_DGW(Diag, _GAMAFORM0_2);
+                UList = GetList_DGW(Diag, _GAMAFORM0_2);
+                // Symbolic link list -> db
+                SymbLST_DB(Data, TCList, DB_SYMB_CHAN);
+                SymbLST_DB(Data, KList, DB_SYMB_CHAN);
+                SymbLST_DB(Data, ThList, DB_SYMB_CHAN);
+                SymbLST_DB(Data, UList, DB_SYMB_CHAN);
+                // Sort lists in alphabetical order
+                Sort_LST(TCList, 0, 0);
+                Sort_LST(KList, 0, 0);
+                Sort_LST(ThList, 0, 0);
+                Sort_LST(UList, 0, 0);
+
+                // Set any defaults from INI
+                SetInfoSYS_DGW(Diag, _BIGRID0_0, DGW_TEXT, "GAMAGEN", "TCCHAN");
+                SetInfoSYS_DGW(Diag, _BIGRID0_1, DGW_TEXT, "GAMAGEN", "KCHAN");
+                SetInfoSYS_DGW(Diag, _BIGRID0_2, DGW_TEXT, "GAMAGEN", "THCHAN");
+                SetInfoSYS_DGW(Diag, _BIGRID0_3, DGW_TEXT, "GAMAGEN", "UCHAN");
+                SetInfoSYS_DGW(Diag, _BIGRID0_4, DGW_FILEPATH, "GAMAGEN", "PATH");
+                SetInfoSYS_DGW(Diag, _BIGRID0_5, DGW_TEXT, "GAMAGEN", "CS");
+
+                // Run the dialog
+                i = iRunDialogue_DGW(Diag);
+                if (i == -1) Cancel_SYS();
+
+                // Put values back in INI 
+                GetInfoSYS_DGW(Diag, _BIGRID0_0, DGW_TEXT, "GAMAGEN", "TCCHAN");
+                GetInfoSYS_DGW(Diag, _BIGRID0_1, DGW_TEXT, "GAMAGEN", "KCHAN");
+                GetInfoSYS_DGW(Diag, _BIGRID0_2, DGW_TEXT, "GAMAGEN", "THCHAN");
+                GetInfoSYS_DGW(Diag, _BIGRID0_3, DGW_TEXT, "GAMAGEN", "UCHAN");
+                GetInfoSYS_DGW(Diag, _BIGRID0_4, DGW_FILEPATH, "GAMAGEN", "PATH");
+                GetInfoSYS_DGW(Diag, _BIGRID0_5, DGW_TEXT, "GAMAGEN", "CS");
+
+                Destroy_DGW(Diag);
+                break;
+
+                // Adv version w/ options- TBD 
+                case 2:
+                DisplayMessage_SYS(_("Lost"), _("I'm lost"));
+                i = 0;
+                break;
+
+                // Error
+                default:
+                DisplayMessage_SYS(_("Lost"), _("I'm lost"));
+                i = 0;
+                break;
+
+            }
+    if (iRunMode == MODE_OPTIONS) {
+        }
+    }
+
+
+    // Release database
+    UnLock_EDB(EData);
+}
