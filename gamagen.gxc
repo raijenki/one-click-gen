@@ -27,6 +27,8 @@ string(STR_DB_SYMBOL) uChan; // U Channel
 string(STR_DEFAULT_LONG) sCS; // grid cell size
 string(STR_FILE) sWorkDir, sWorhDir; // directory
 
+string(STR_DB_SYMBOL) sXCh, sYCh; // default x and y
+
 int i; // aux var
 int iRunMode; // for v0.2 with 'advanced' menu
 
@@ -139,9 +141,36 @@ LST UList;    // U list
         }
     }
     
-
+    // Get parameters
+    GetString_SYS("GAMAGEN", "TCCHAN", tcChan);
+    GetString_SYS("GAMAGEN", "KCHAN", kChan);
+    GetString_SYS("GAMAGEN", "THCHAN", thChan);
+    GetString_SYS("GAMAGEN", "UCHAN", uChan);
+    GetString_SYS("GAMAGEN", "CS", sCS);
     
+    // Validate all channels (sanity check)
+    GetXYZChan_DB(Data, DB_CHAN_X, sXCh);
+    GetXYZChan_DB(Data, DB_CHAN_Y, sYCh);
 
+    if (!iExistChan_DB(Data, sXCh))
+          Abort_SYS(_("The current X channel does not exist."));
+
+    if (!iExistChan_DB(Data, sYCh))
+          Abort_SYS(_("The current Y channel does not exist."));
+
+    if (!iExistChan_DB(Data, tcChan))
+          Abort_SYS(_("Total Count Channel is not specified or does not exist"));
+
+    if (!iExistChan_DB(Data, kChan))
+          Abort_SYS(_("K Channel is not specified or does not exist"));
+
+    if (!iExistChan_DB(Data, thChan))
+          Abort_SYS(_("Th Channel is not specified or does not exist"));
+
+    if (!iExistChan_DB(Data, uChan))
+          Abort_SYS(_("U Channel is not specified or does not exist"));
+
+    // Set default parameters (TBD: allow customization)
 
     // Release database
     UnLock_EDB(EData);
