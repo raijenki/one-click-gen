@@ -1,5 +1,5 @@
 NAME          = "One-click Gamaspectometric Map Generator"
-
+#include <version.gxh>
 DESCRIPTION   = "
       This generator uses bigrid as base.  
 "
@@ -9,16 +9,20 @@ DESCRIPTION   = "
 
 RESOURCE = "gamagen.gr"
 
-#include <version.gxh>
+
 #include "gamagen.grh"
 #include <all.gxh>
 
 /////////////////////
 //   Global vars   //
 /////////////////////
-#define MODE_NORMAL 0;
-#define MODE_OPTIONS 1; // for v0.2 with 'advanced' menu
 
+////
+// Mostly for grids
+////
+string(STR_DEFAULT_LONG) sTitle;
+string(STR_DEFAULT_LONG) sText; // line for control file
+string(STR_FILE) sGrid, sName; // name of output grid
 string(STR_FILE) gridPath; // Output path
 string(STR_DB_SYMBOL) tcChan; // Total Count Channel
 string(STR_DB_SYMBOL) kChan; // K Channel
@@ -26,19 +30,75 @@ string(STR_DB_SYMBOL) thChan; // Th Channel
 string(STR_DB_SYMBOL) uChan; // U Channel
 string(STR_DEFAULT_LONG) sCS; // grid cell size
 string(STR_FILE) sWorkDir, sWorhDir; // directory
-
+string(2) sDirSeparatorChar;
 string(STR_DB_SYMBOL) sXCh, sYCh; // default x and y
+string(STR_DEFAULT_LONG) sMsg, sUnits, sAliasFlag;
+string(STR_DEFAULT_LONG) sNEX;
+string(STR_DEFAULT_LONG) sISP1;
+string(STR_DEFAULT_LONG) sISP2;
+string(STR_DEFAULT_LONG) sPRESORT;
+string(STR_DEFAULT_LONG) sLOGOPT;
+string(STR_DEFAULT_LONG) sLOGMIN;
+string(STR_DEFAULT_LONG) sXYRANGE;
+string(STR_DEFAULT_LONG) sTRA;
+string(STR_DEFAULT_LONG) sKX;
+string(STR_DEFAULT_LONG) sSMX;
+string(STR_DEFAULT_LONG) sGAPLIM;
+string(STR_DEFAULT_LONG) sWS;
+string(STR_DEFAULT_LONG) sWL;
+string(STR_DEFAULT_LONG) sTOLN;
+string(STR_DEFAULT_LONG) sFDX;
+string(STR_DEFAULT_SHORT) sColor;
 
-int i; // aux var
+
+IMG IMGIN1;  // Image for the first input grid
+IMG IMGIN2;  // Image for the second input grid
+IMG IMGIN3; 
+IMG IMGOUT_UK;  // Image for the output grid
+IMG IMGOUT_UTH;  // Image for the output grid
+IMG IMGOUT_THK;  // Image for the output grid
+IEXP IEXP0;  // Image expression to divide IN1 by IN2
+string(STR_FILE) sRat;
+
+int i, j, iTRA, iNew; // aux var
 int iRunMode; // for v0.2 with 'advanced' menu
+int maps;
+real rTRA;
+real rTOLN, rLS, rWS, rF, rFDX;
 
+BIGRID Bigrid;  // Handle to BIGRIDd object
+DAT InDat;      // Handle to Input DAT
+DAT OutDat;     // Handle to Output DAT
+WA ConFile;  // Control File
 EDB EData; // Database handle
 DB Data;  // Database
+DGW Diag; 
+IPJ hIPJ;
+DB_SYMB XCh;
 LST TCList;    // TC channel list
 LST KList;    // K list
 LST ThList;    // Th list
 LST UList;    // U list
 
+// Mostly for maps
+string(GS_MAX_PATH) sFont, sGroup, sAgg2;
+string(STR_GROUP) sGrpName;
+string(STR_FILE) sGridRC,sMap;
+string(STR_FILE) sGrid0, sGrid1, sGrid2, sGrid3, sGrid4, sGrid5, sGrid6;
+string(STR_GROUP) sAgg;
+string(STR_VIEW) sView;
+string(STR_FILE) sTableX;
+MVIEW View, BaseView;
+AGG Agg;
+IMG hIMG;
+EMAP EMap;
+MAP Map;
+ITR Itr;
+int iDec;
+real rAnn, rHeight, rWidth, rX, rY;
+
+#define MODE_NORMAL 0;
+#define MODE_OPTIONS 1; // for v0.2 with 'advanced' menu
 
 //////////////
 // Gen Code //
@@ -46,18 +106,19 @@ LST UList;    // U list
 
 {
     // Get database (gamma)
-    EDATA = Current_EDB();
+    EData = Current_EDB();
     // Lock database 
     Data = Lock_EDB(EData);
-    // Looks like iGetInt_SYS and SetInt_SYS works as INI; got this from original BIGRID code
+
+
+    // Looks like iGetInt_SYS and SetInt_SYS works as INI, got this from original BIGRID code
     // This should be set everytime to normal behaviour
     iRunMode = iGetInt_SYS("GAMAGEN", "RUNMODE");
     SetInt_SYS("GAMAGEN", "RUNMODE", 0);
 
     // Sanity check to default behaviour
-    if (iRunMode != MODE_OPTIONS) { 
-        iRunMode = MODE_NORMAL;
-    }
+    if (iRunMode != 0) iRunMode = 1;
+
 
    // Get the current project database directory 
    GetString_SYS("GAMAGEN", "PROJECT_DIR", sWorkDir);
@@ -74,10 +135,10 @@ LST UList;    // U list
     if (iInteractive_SYS()) {
         i = 1;
         while(i!=0) {
+			switch(i) {
             /////////////////
             // Normal mode //
             /////////////////
-
             case 1: 
             // Create the dialogue
             Diag = Create_DGW("GAMAFORM0");
@@ -85,7 +146,7 @@ LST UList;    // U list
             TCList = GetList_DGW(Diag, _GAMAFORM0_0);
             KList = GetList_DGW(Diag, _GAMAFORM0_1);
             ThList = GetList_DGW(Diag, _GAMAFORM0_2);
-            UList = GetList_DGW(Diag, _GAMAFORM0_2);
+            UList = GetList_DGW(Diag, _GAMAFORM0_3);
             // Symbolic link list -> db
             SymbLST_DB(Data, TCList, DB_SYMB_CHAN);
             SymbLST_DB(Data, KList, DB_SYMB_CHAN);
@@ -111,7 +172,7 @@ LST UList;    // U list
 
             if (i==3) {
                 iBrowseDir_GUI(_("Select output directory"), sWorkDir, sWorkDir);
-                continue;
+				//continue;
             }
 
             // Put values back in INI 
@@ -138,6 +199,7 @@ LST UList;    // U list
             DisplayMessage_SYS(_("Lost"), _("I'm lost"));
             i = 0;
             break;
+			}
         }
     }
     
@@ -154,8 +216,8 @@ LST UList;    // U list
 
     if (!iExistChan_DB(Data, sXCh))
           Abort_SYS(_("The current X channel does not exist."));
-
-    if (!iExistChan_DB(Data, sYCh))
+    
+	if (!iExistChan_DB(Data, sYCh))
           Abort_SYS(_("The current Y channel does not exist."));
 
     if (!iExistChan_DB(Data, tcChan))
@@ -170,8 +232,402 @@ LST UList;    // U list
     if (!iExistChan_DB(Data, uChan))
           Abort_SYS(_("U Channel is not specified or does not exist"));
 
-    // Set default parameters (TBD: allow customization)
 
-    // Release database
-    UnLock_EDB(EData);
+    // Set default parameters (TBD: allow customization)
+      Strcpy_STR(sNEX, "1"); // extend 1 cell
+      Strcpy_STR(sISP1, "2"); // akima spline down line
+      Strcpy_STR(sISP2, "2"); // akima spline down-line
+      Strcpy_STR(sPRESORT, "0"); // presort: none
+      Strcpy_STR(sLOGOPT, "0"); // linear
+      rTOLN = rGetReal_SYS("BIGRID", "TOLN");
+      rWS = rGetReal_SYS("BIGRID", "WS");
+      rLS = rGetReal_SYS("BIGRID", "LS");
+      rFDX = rGetReal_SYS("BIGRID", "FDX");
+      rTRA = rGetReal_SYS("BIGRID", "TRA");
+      iTRA = FALSE;
+
+    // Number of maps: This is the kernel of all one-click-gen plugins
+    // For Gamagen: Total Count, eTh, eK, eU, Ternary and 3x Ratios
+    maps = 4;
+
+    for(j = 0; j < maps; j++) {
+      // Create control file
+      ConFile = Create_WA("_bigrid.con", 0);
+      Strcpy_STR(sTitle, _n("Channel "));
+
+      if(j == 0) { // Specific info for Total Count
+            Strcpy_STR(sGrid, "totalcount.grd"); 
+            Strcpy_STR(sGrid0, "totalcount.grd"); 
+
+            Strcat_STR(sTitle, tcChan);
+            Strcat_STR(sTitle, _n(" from "));
+            GetName_DB(Data, DB_NAME_FILE, sText);
+            Strcat_STR(sTitle, sText);
+            Puts_WA(ConFile, sTitle);
+
+            Strcpy_STR(sColor, "colour.tbl");  // Colour
+            InDat = CreateDB_DAT(Data, sXCh, sYCh, tcChan);
+            OutDat = CreateXGD_DAT(sGrid, DAT_XGD_NEW);
+
+      }
+      if(j == 1) { // Specific info for K
+            Strcpy_STR(sGrid, "kchan.grd"); 
+            Strcpy_STR(sGrid1, "kchan.grd"); 
+            Strcat_STR(sTitle, kChan);
+            Strcat_STR(sTitle, _n(" from "));
+            Strcat_STR(sTitle, _n(" from "));
+            GetName_DB(Data, DB_NAME_FILE, sText);
+            Strcat_STR(sTitle, sText);
+            Puts_WA(ConFile, sTitle);
+
+            Strcpy_STR(sColor, "colour.tbl");  // Colour
+            InDat = CreateDB_DAT(Data, sXCh, sYCh, kChan);
+            OutDat = CreateXGD_DAT(sGrid, DAT_XGD_NEW);
+
+      }
+      if(j == 2) { // Specific info for Th
+            Strcpy_STR(sGrid, "thchan.grd"); 
+            Strcpy_STR(sGrid2, "thchan.grd"); 
+            Strcat_STR(sTitle, thChan);
+            Strcat_STR(sTitle, _n(" from "));
+            Strcat_STR(sTitle, _n(" from "));
+            GetName_DB(Data, DB_NAME_FILE, sText);
+            Strcat_STR(sTitle, sText);
+            Puts_WA(ConFile, sTitle);
+
+            Strcpy_STR(sColor, "colour.tbl");  // Colour
+            InDat = CreateDB_DAT(Data, sXCh, sYCh, thChan);
+            OutDat = CreateXGD_DAT(sGrid, DAT_XGD_NEW);
+
+      }
+      if(j == 3) { // Specific info for U
+            Strcpy_STR(sGrid, "uchan.grd"); 
+            Strcpy_STR(sGrid3, "uchan.grd"); 
+            Strcat_STR(sTitle, uChan);
+            Strcat_STR(sTitle, _n(" from "));
+            Strcat_STR(sTitle, _n(" from "));
+            GetName_DB(Data, DB_NAME_FILE, sText);
+            Strcat_STR(sTitle, sText);
+            Puts_WA(ConFile, sTitle);
+
+            Strcpy_STR(sColor, "colour.tbl");  // Colour
+            InDat = CreateDB_DAT(Data, sXCh, sYCh, uChan);
+            OutDat = CreateXGD_DAT(sGrid, DAT_XGD_NEW);
+
+      }
+
+      if(j == 4) { // Ternary map
+      /*SetString_SYS("TERNLEG", "MODEL", sModel);
+      FileNamePart_STR(sGridRC, sModel, STR_FILE_PART_NAME);
+      SetString_SYS("TERNLEG", "LABEL1", sModel);
+      FileNamePart_STR(sGridGM, sModel, STR_FILE_PART_NAME);
+      SetString_SYS("TERNLEG", "LABEL2", sModel);
+      FileNamePart_STR(sGridBY, sModel, STR_FILE_PART_NAME);
+      SetString_SYS("TERNLEG", "LABEL3", sModel);*/
+      }
+      
+      // This generates the .con file. I am just copying this from the original Bigrid code.
+      // Looks like even the original devs dont know what this does
+      NewLine_WA(ConFile);
+      Strcpy_STR(sText, sCS);
+      Strcat_STR(sText, ",");
+      Strcat_STR(sText, sNEX);
+      Strcat_STR(sText, ",");
+      Strcat_STR(sText, sPRESORT);
+      Strcat_STR(sText, " /CS");
+      Puts_WA(ConFile, sText);
+      NewLine_WA(ConFile);
+
+      Strcpy_STR(sText, sXYRANGE);
+      Strcat_STR(sText, _n(" /XMIN,YMIN,XMAX,YMAX"));
+      Puts_WA(ConFile, sText);
+      NewLine_WA(ConFile);
+
+      Strcpy_STR(sText, sTRA);
+      Strcat_STR(sText, ",");
+      Strcat_STR(sText, sKX);
+      Strcat_STR(sText, " /TRA,KX");
+      Puts_WA(ConFile, sText);
+      NewLine_WA(ConFile);
+
+      Strcpy_STR(sText, ",");
+      Strcat_STR(sText, sSMX);
+      Strcat_STR(sText, ",");
+      Strcat_STR(sText, sGAPLIM);
+      Strcat_STR(sText, ",,");
+      Strcat_STR(sText, _n(",, /SLM,SMX,GAPLIM,LSEL"));
+      Puts_WA(ConFile, sText);
+      NewLine_WA(ConFile);
+
+      Puts_WA(ConFile, _n("/SCL,SX,SY,ANGS"));
+      NewLine_WA(ConFile);
+
+      Strcpy_STR(sText, ",");
+      Strcat_STR(sText, sLOGOPT);
+      Strcat_STR(sText, ",");
+      Strcat_STR(sText, sLOGMIN);
+      Strcat_STR(sText, " /IZ,LOGZ,ZMIN");
+      Puts_WA(ConFile, sText);
+      NewLine_WA(ConFile);
+
+      Puts_WA(ConFile, "/BL,XX");
+      NewLine_WA(ConFile);
+
+      Strcpy_STR(sText, sWS);
+      Strcat_STR(sText, ",");
+      Strcat_STR(sText, sWL);
+      Strcat_STR(sText, ",");
+      Strcat_STR(sText, sFDX);
+      Strcat_STR(sText, _n(",,, /WS,WL,FDX,FT"));
+      Puts_WA(ConFile, sText);
+      NewLine_WA(ConFile);
+
+      Strcpy_STR(sText, "");
+      if (iStrcmp_STR(sTOLN, "", 0)) {
+            Strcat_STR(sText, "1,");
+            Strcat_STR(sText, sTOLN);
+      }
+      Strcat_STR(sText, " /NFLT,TOLN");
+      Puts_WA(ConFile, sText);
+      NewLine_WA(ConFile);
+
+      Strcpy_STR(sText, sISP1);
+      Strcat_STR(sText, ",");
+      Strcat_STR(sText, sISP2);
+      Strcat_STR(sText, " /ISP1,ISP2");
+      Puts_WA(ConFile, sText);
+      NewLine_WA(ConFile);
+
+      // Destroy con file
+      Destroy_WA(ConFile);
+
+      // Delete existing grids
+      if (iFileExist_SYS(sGrid)) {
+            if (iInteractive_SYS())
+                  iRemoveDocument_PROJ(sGrid);
+            iDeleteGridFile_SYS(sGrid);
+      }
+
+
+      // Put hIPJ into image
+      XCh = FindChan_DB(Data, sXCh);
+      LockSymb_DB(Data, XCh, DB_LOCK_READONLY, DB_WAIT_NONE);
+      hIPJ = Create_IPJ();
+      GetIPJ_DB(Data, XCh, hIPJ);
+      GetUnits_IPJ(hIPJ, rF, sUnits);
+      SetUnits_IPJ(hIPJ, rF, sUnits);
+
+      // Release symbol lock
+      UnLockSymb_DB(Data, XCh);
+
+      // Create Bigrid obj
+      Bigrid = Create_BIGRID();
+
+      // Load control parameters
+      if (iLoadParms_BIGRID(Bigrid, "_bigrid.con"))
+            Abort_SYS(_("Bad control file"));
+      
+      // BIGRID
+      Progress_SYS(1);
+      Run2_BIGRID(Bigrid, "1", InDat, OutDat, hIPJ);
+      Progress_SYS(0);
+
+      // Destroy objects
+      Destroy_BIGRID(Bigrid);
+      Destroy_DAT(InDat);
+      Destroy_DAT(OutDat);    
+
+      // Destroy tempfiles
+      iDeleteFile_SYS("_bigrid.grd");
+      iDeleteFile_SYS("_bigrid.con");
+      
+      // Add grid to project
+      if (iInteractive_SYS())
+             iAddDocument_PROJ(sGrid, "Grid", 1);
+    }
+      
+
+      // Grid math for ThK, UK and UTh
+      //(It'd be better if I could do on Database and grid it, but learning docs would take a loooong time)
+
+      // This creates ins and outs 
+      IMGIN1 = CreateFile_IMG(GS_DOUBLE, "kchan.grd(GRD;comp=none)", IMG_FILE_READONLY);
+      IMGIN2 = CreateFile_IMG(GS_DOUBLE, "thchan.grd(GRD;comp=none)", IMG_FILE_READONLY);
+      IMGIN3 = CreateFile_IMG(GS_DOUBLE, "uchan.grd(GRD;comp=none)", IMG_FILE_READONLY);
+      IMGOUT_THK = CreateOutFile_IMG(GS_DOUBLE, "thkratio.grd(GRD;comp=none)", IMGIN1);
+      IMGOUT_UK = CreateOutFile_IMG(GS_DOUBLE, "ukratio.grd(GRD;comp=none)", IMGIN1);
+      IMGOUT_UTH = CreateOutFile_IMG(GS_DOUBLE, "uthratio.grd(GRD;comp=none)", IMGIN1);
+
+      // This inherits projections and other stuff 
+      InheritIMG_IMG(IMGIN2, IMGIN1);
+      InheritIMG_IMG(IMGIN3, IMGIN1);
+      // Object iterator and operations
+      IEXP0 = Create_IEXP();
+      AddGrid_IEXP(IEXP0, IMGIN1, "In1");
+      AddGrid_IEXP(IEXP0, IMGIN2, "In2");
+      AddGrid_IEXP(IEXP0, IMGIN3, "In3");
+      AddGrid_IEXP(IEXP0, IMGOUT_THK, "Out1");
+      AddGrid_IEXP(IEXP0, IMGOUT_UK, "Out2");
+      AddGrid_IEXP(IEXP0, IMGOUT_UTH, "Out3");
+
+      DoFormula_IEXP(IEXP0, "Out1 = In2 / In1;", 1024);
+      DoFormula_IEXP(IEXP0, "Out2 = In3 / In1;", 1024);
+      DoFormula_IEXP(IEXP0, "Out3 = In3 / In2;", 1024);
+      
+      // Destroy everything
+      Destroy_IEXP(IEXP0);
+      Destroy_IMG(IMGIN1);
+      Destroy_IMG(IMGIN2);
+      Destroy_IMG(IMGIN3);
+      Destroy_IMG(IMGOUT_THK);
+      Destroy_IMG(IMGOUT_UTH);
+      Destroy_IMG(IMGOUT_UK);
+
+      if (iInteractive_SYS()) {
+             Strcpy_STR(sGrid4, "thkratio.grd"); 
+             Strcpy_STR(sGrid5, "ukratio.grd"); 
+             Strcpy_STR(sGrid6, "uthratio.grd"); 
+             iAddDocument_PROJ("thkratio.grd", "Grid", 1);
+             iAddDocument_PROJ("ukratio.grd", "Grid", 1);
+             iAddDocument_PROJ("uthratio.grd", "Grid", 1);
+      }
+    
+
+      ////
+      // Maps
+      ////
+
+
+      // Let's always create a new map
+      SetString_SYS("GAMAGEN", "NEW", "1");
+      Strcpy_STR(sMap, "OCG_gama.map");  // Map name
+
+
+      // Should we create a new map? Default is yes
+      iNew = iGetInt_SYS("GAMAGEN", "NEW");
+
+      if (iNew != 0) {
+            // --- range the grid ---
+            SetString_SYS("IMGRANGE", "FILE", sGrid);
+            if (iRunGX_SYS("imgrange.gx")) Abort_SYS(_("Failed to determine grid range."));
+            
+            // We set the name at DEFMAP/MAP to use 
+            SetString_SYS("DEFMAP", "MAP", sMap);
+            if (iRunGX_SYS("defmap.gx")) Cancel_SYS(); // This script creates a map
+            SetString_SYS("GAMAGEN", "NEW", "0");  
+      }
+
+      // Sanity check on grid
+      if(iRunGX_SYS("sclgrd") == -1) Cancel_SYS();
+      if (iRunGX_SYS("sclmap") != 0) Cancel_SYS();
+
+      // Lock maps
+
+
+
+      SetInteractive_SYS(0);
+      // Loop over 0-6
+      maps = 7;
+      for (j = 0; j < maps; j++) {
+            EMap = Current_EMAP();
+            Map = Lock_EMAP(EMap);
+            Agg = Create_AGG();
+
+            Progress_SYS(1);
+            ProgName_SYS(_("Layer"), 1);
+            if (j == 0) LayerIMG_AGG(Agg, sGrid0, 0, sColor, rDUMMY);
+            if (j == 1) LayerIMG_AGG(Agg, sGrid1, 0, sColor, rDUMMY);
+            if (j == 2) LayerIMG_AGG(Agg, sGrid2, 0, sColor, rDUMMY);
+            if (j == 3) LayerIMG_AGG(Agg, sGrid3, 0, sColor, rDUMMY);
+            if (j == 4) LayerIMG_AGG(Agg, sGrid4, 0, sColor, rDUMMY);
+            if (j == 5) LayerIMG_AGG(Agg, sGrid5, 0, sColor, rDUMMY);
+            if (j == 6) LayerIMG_AGG(Agg, sGrid6, 0, sColor, rDUMMY);
+            Progress_SYS(0);
+
+            View = Create_MVIEW(Map, "*Data", MVIEW_WRITEOLD);
+
+            GroupClipMode_MVIEW(View, TRUE);
+
+            //if (j == 0) { 
+            //      DisplayMessage_SYS(_("Locate Color Bar"), _("Click on the location for the bottom left corner of the bar."));
+            //      if (iGetPoint_EMAP(EMap, _("Locate Color Bar..."), rX, rY)) Cancel_SYS();
+            //}
+            Strcpy_STR(sAgg,"OCG_");
+            Strcpy_STR(sName,"");
+            if (j == 0) FileNamePart_STR(sGrid0, sName, STR_FILE_PART_NAME);
+            if (j == 1) FileNamePart_STR(sGrid1, sName, STR_FILE_PART_NAME);
+            if (j == 2) FileNamePart_STR(sGrid2, sName, STR_FILE_PART_NAME);
+            if (j == 3) FileNamePart_STR(sGrid3, sName, STR_FILE_PART_NAME);
+            if (j == 4) FileNamePart_STR(sGrid4, sName, STR_FILE_PART_NAME);
+            if (j == 5) FileNamePart_STR(sGrid5, sName, STR_FILE_PART_NAME);
+            if (j == 6) FileNamePart_STR(sGrid6, sName, STR_FILE_PART_NAME);
+            ToLower_STR(sName);
+            Strcat_STR(sAgg, sName);
+            
+            Aggregate_MVIEW(View, Agg, sAgg);
+            GroupClipMode_MVIEW(View, FALSE);
+            StartGroup_MVIEW(View, sAgg, MVIEW_GROUP_APPEND);
+            //ExportAllInView_MAP(Map, "teste.tif", "*Data", rDUMMY, 300.0, MAP_EXPORT_BITS_32, MAP_EXPORT_METHOD_STANDARD, MAP_EXPORT_FORMAT_GTIFF, "");
+            Destroy_MVIEW(View);
+
+
+            // Legend Color bar for each
+            iDec = 1;
+            rAnn = 1.5;
+            rHeight = 3.0;
+            rWidth = 4.0;
+            rX = 20.0;
+            rY = 30.0;
+            if (j == 0) Itr = CreateMap_ITR(Map, "Data\\OCG_totalcount\\totalcount");
+            if (j == 1) Itr = CreateMap_ITR(Map, "Data\\OCG_kchan\\kchan");
+            if (j == 2) Itr = CreateMap_ITR(Map, "Data\\OCG_thchan\\thchan");
+            if (j == 3) Itr = CreateMap_ITR(Map, "Data\\OCG_uchan\\uchan");
+            if (j == 4) Itr = CreateMap_ITR(Map, "Data\\OCG_thkratio\\thkratio");
+            if (j == 5) Itr = CreateMap_ITR(Map, "Data\\OCG_ukratio\\ukratio");
+            if (j == 6) Itr = CreateMap_ITR(Map, "Data\\OCG_uthratio\\uthratio");
+            Strcpy_STR(sName, sAgg);
+            i = iTokens_STR(sName, "\\");
+            GetToken_STR(sGroup, sName, (i - 1));
+            GenGroupName_STR(_n("ColorBar"), sGroup, "", sGrpName);
+            Strcpy_STR(sName, sGrpName);
+            
+            BaseView = Create_MVIEW(Map, "*Base", MVIEW_WRITEOLD);
+            StartGroup_MVIEW(BaseView, sName, MVIEW_GROUP_NEW);
+
+            if (iGlobal_SYS("MONTAJ.DEFAULT_MAP_FONT", sFont) == 1)
+                  Strcpy_STR(sFont, "Arial");
+            TextFont_MVIEW(BaseView, sFont, FALSE, MVIEW_FONT_WEIGHT_NORMAL, FALSE);
+            TextColor_MVIEW(BaseView, C_BLACK);
+            ColorBar_MVU(BaseView,Itr,iDec,rAnn,rHeight,rWidth,rX,rY);
+            Destroy_MVIEW(BaseView);
+            UnLock_EMAP(EMap); 
+            Destroy_AGG(Agg);
+      }
+
+      // This creates the ternary map 
+      // Multiple layers of different color tables
+      Agg = Create_AGG();
+      LayerIMG_AGG(Agg, sGrid1, 3, "k-r.tbl", rDUMMY);
+      LayerIMG_AGG(Agg, sGrid2, 3, "k-g.tbl", rDUMMY);
+      LayerIMG_AGG(Agg, sGrid3, 3, "k-b.tbl", rDUMMY);
+      Strcpy_STR(sTableX, "rgbgrey.tbl");
+      _SetModel_AGG(Agg, AGG_MODEL_RGB);
+      // Lock map, create views, set name, etc
+      EMap = Current_EMAP();
+      Map = Lock_EMAP(EMap);
+      View = Create_MVIEW(Map, "*Data", MVIEW_WRITEOLD);
+      Strcpy_STR(sAgg, "OCG_ternary");
+      Aggregate_MVIEW(View, Agg, sAgg);
+      // Clip groups
+      MarkAllGroups_MVIEW(View, 0);
+      MarkGroup_MVIEW(View, sAgg, 1);
+      ClipMarkedGroups_MVIEW(View, CLIP_ON);
+      MarkAllGroups_MVIEW(View, 0);
+      // Destroy objs
+      Destroy_AGG(Agg);
+      Destroy_MVIEW(View);
+
+      // Destroy IPJ and Unlock DB
+      Destroy_IPJ(hIPJ);
+      UnLock_EDB(EData);
 }
