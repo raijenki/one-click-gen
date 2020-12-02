@@ -231,16 +231,16 @@ real rMinLon, rMinLat, rMaxLon, rMaxLat;
     // For Gamagen: Total Count, eTh, eK, eU, Ternary and 3x Ratios
     maps = 4;
 
-    for(j = 0; j < maps; j++) {
-      // Create control file
-      ConFile = Create_WA("_bigrid.con", 0);
-      Strcpy_STR(sTitle, _n("Channel "));
-
       // Create directories
       iMakeDir_SYS("OCG");
       iMakeDir_SYS("OCG\\Grids");
       iMakeDir_SYS("OCG\\Maps");
       iMakeDir_SYS("OCG\\Exports");
+
+    for(j = 0; j < maps; j++) {
+      // Create control file
+      ConFile = Create_WA("_bigrid.con", 0);
+      Strcpy_STR(sTitle, _n("Channel "));
 
       if(j == 0) { // Specific info for Total Count
             Strcpy_STR(sGrid, "OCG\\Grids\\totalcount.grd"); 
