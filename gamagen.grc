@@ -3,10 +3,8 @@ LEDIT,,,32,"Total Count Channel",R,,,tcchan
 LEDIT,,,32,"K Channel",R,,,kchan
 LEDIT,,,32,"Th Channel",R,,,thchan
 LEDIT,,,32,"U Channel",R,,,uchan
-EDIT ,,,30,"Output directory",N
 EDIT ,,,32,"Grid cell size",,REAL
 EBUT,&OK,0
-EBUT,&Directory,3
 EBUT,&Cancel,-1,CANCEL
 HBUT,&Help,gamagen_1
 

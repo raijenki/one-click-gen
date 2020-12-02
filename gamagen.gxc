@@ -22,17 +22,16 @@ RESOURCE = "gamagen.gr"
 ////
 string(STR_DEFAULT_LONG) sTitle;
 string(STR_DEFAULT_LONG) sText; // line for control file
+string(STR_FILE) sFile_export;
+string(STR_FILE) sFormat;
 string(STR_FILE) sGrid, sName; // name of output grid
-string(STR_FILE) gridPath; // Output path
 string(STR_DB_SYMBOL) tcChan; // Total Count Channel
 string(STR_DB_SYMBOL) kChan; // K Channel
 string(STR_DB_SYMBOL) thChan; // Th Channel
 string(STR_DB_SYMBOL) uChan; // U Channel
 string(STR_DEFAULT_LONG) sCS; // grid cell size
-string(STR_FILE) sWorkDir, sWorhDir; // directory
-string(2) sDirSeparatorChar;
 string(STR_DB_SYMBOL) sXCh, sYCh; // default x and y
-string(STR_DEFAULT_LONG) sMsg, sUnits, sAliasFlag;
+string(STR_DEFAULT_LONG) sUnits;
 string(STR_DEFAULT_LONG) sNEX;
 string(STR_DEFAULT_LONG) sISP1;
 string(STR_DEFAULT_LONG) sISP2;
@@ -58,7 +57,6 @@ IMG IMGOUT_UK;  // Image for the output grid
 IMG IMGOUT_UTH;  // Image for the output grid
 IMG IMGOUT_THK;  // Image for the output grid
 IEXP IEXP0;  // Image expression to divide IN1 by IN2
-string(STR_FILE) sRat;
 
 int i, j, iTRA, iNew; // aux var
 int iRunMode; // for v0.2 with 'advanced' menu
@@ -81,21 +79,21 @@ LST ThList;    // Th list
 LST UList;    // U list
 
 // Mostly for maps
-string(GS_MAX_PATH) sFont, sGroup, sAgg2;
+string(GS_MAX_PATH) sFont, sGroup;
 string(STR_GROUP) sGrpName;
-string(STR_FILE) sGridRC,sMap;
+string(STR_FILE) sMap;
 string(STR_FILE) sGrid0, sGrid1, sGrid2, sGrid3, sGrid4, sGrid5, sGrid6;
 string(STR_GROUP) sAgg;
 string(STR_VIEW) sView;
 string(STR_FILE) sTableX;
 MVIEW View, BaseView;
 AGG Agg;
-IMG hIMG;
 EMAP EMap;
 MAP Map;
 ITR Itr;
 int iDec;
 real rAnn, rHeight, rWidth, rX, rY;
+real rMinLon, rMinLat, rMaxLon, rMaxLat;
 
 #define MODE_NORMAL 0;
 #define MODE_OPTIONS 1; // for v0.2 with 'advanced' menu
@@ -119,17 +117,6 @@ real rAnn, rHeight, rWidth, rX, rY;
     // Sanity check to default behaviour
     if (iRunMode != 0) iRunMode = 1;
 
-
-   // Get the current project database directory 
-   GetString_SYS("GAMAGEN", "PROJECT_DIR", sWorkDir);
-   if (!iStrlen_STR(sWorkDir) || !iDirExist_SYS(sWorkDir)) {
-      GetDirectory_SYS(SYS_DIR_LOCAL, sWorkDir);  // default to workspace directory
-   }
-   // Ensure that sWorkDir ends with a path separator
-   Strcpy_STR(sDirSeparatorChar, "\\");
-   if (iCharN_STR(sWorkDir, iStrlen_STR(sWorkDir) - 1) != iCharN_STR(sDirSeparatorChar, 0)) {
-      Strcat_STR(sWorkDir, "\\");
-   }
 
     // "Are we running iteractively?" IDK what this actually means. Geosoft babble.
     if (iInteractive_SYS()) {
@@ -163,24 +150,18 @@ real rAnn, rHeight, rWidth, rX, rY;
             SetInfoSYS_DGW(Diag, _GAMAFORM0_1, DGW_TEXT, "GAMAGEN", "KCHAN");
             SetInfoSYS_DGW(Diag, _GAMAFORM0_2, DGW_TEXT, "GAMAGEN", "THCHAN");
             SetInfoSYS_DGW(Diag, _GAMAFORM0_3, DGW_TEXT, "GAMAGEN", "UCHAN");
-            SetInfo_DGW(Diag, _GAMAFORM0_4, DGW_TEXT, sWorkDir);
-            SetInfoSYS_DGW(Diag, _GAMAFORM0_5, DGW_TEXT, "GAMAGEN", "CS");
+            SetInfoSYS_DGW(Diag, _GAMAFORM0_4, DGW_TEXT, "GAMAGEN", "CS");
 
             // Run the dialog
             i = iRunDialogue_DGW(Diag);
             if (i==-1) Cancel_SYS();
-
-            if (i==3) {
-                iBrowseDir_GUI(_("Select output directory"), sWorkDir, sWorkDir);
-				//continue;
-            }
 
             // Put values back in INI 
             GetInfoSYS_DGW(Diag, _GAMAFORM0_0, DGW_TEXT, "GAMAGEN", "TCCHAN");
             GetInfoSYS_DGW(Diag, _GAMAFORM0_1, DGW_TEXT, "GAMAGEN", "KCHAN");
             GetInfoSYS_DGW(Diag, _GAMAFORM0_2, DGW_TEXT, "GAMAGEN", "THCHAN");
             GetInfoSYS_DGW(Diag, _GAMAFORM0_3, DGW_TEXT, "GAMAGEN", "UCHAN");
-            GetInfoSYS_DGW(Diag, _GAMAFORM0_5, DGW_TEXT, "GAMAGEN", "CS");
+            GetInfoSYS_DGW(Diag, _GAMAFORM0_4, DGW_TEXT, "GAMAGEN", "CS");
 
             Destroy_DGW(Diag);
             break;
@@ -237,7 +218,7 @@ real rAnn, rHeight, rWidth, rX, rY;
       Strcpy_STR(sNEX, "1"); // extend 1 cell
       Strcpy_STR(sISP1, "2"); // akima spline down line
       Strcpy_STR(sISP2, "2"); // akima spline down-line
-      Strcpy_STR(sPRESORT, "0"); // presort: none
+      Strcpy_STR(sPRESORT, "1"); // presort: pre-sort data
       Strcpy_STR(sLOGOPT, "0"); // linear
       rTOLN = rGetReal_SYS("BIGRID", "TOLN");
       rWS = rGetReal_SYS("BIGRID", "WS");
@@ -255,9 +236,15 @@ real rAnn, rHeight, rWidth, rX, rY;
       ConFile = Create_WA("_bigrid.con", 0);
       Strcpy_STR(sTitle, _n("Channel "));
 
+      // Create directories
+      iMakeDir_SYS("OCG");
+      iMakeDir_SYS("OCG\\Grids");
+      iMakeDir_SYS("OCG\\Maps");
+      iMakeDir_SYS("OCG\\Exports");
+
       if(j == 0) { // Specific info for Total Count
-            Strcpy_STR(sGrid, "totalcount.grd"); 
-            Strcpy_STR(sGrid0, "totalcount.grd"); 
+            Strcpy_STR(sGrid, "OCG\\Grids\\totalcount.grd"); 
+            Strcpy_STR(sGrid0, "OCG\\Grids\\totalcount.grd"); 
 
             Strcat_STR(sTitle, tcChan);
             Strcat_STR(sTitle, _n(" from "));
@@ -271,8 +258,8 @@ real rAnn, rHeight, rWidth, rX, rY;
 
       }
       if(j == 1) { // Specific info for K
-            Strcpy_STR(sGrid, "kchan.grd"); 
-            Strcpy_STR(sGrid1, "kchan.grd"); 
+            Strcpy_STR(sGrid, "OCG\\Grids\\kchan.grd"); 
+            Strcpy_STR(sGrid1, "OCG\\Grids\\kchan.grd"); 
             Strcat_STR(sTitle, kChan);
             Strcat_STR(sTitle, _n(" from "));
             Strcat_STR(sTitle, _n(" from "));
@@ -286,8 +273,8 @@ real rAnn, rHeight, rWidth, rX, rY;
 
       }
       if(j == 2) { // Specific info for Th
-            Strcpy_STR(sGrid, "thchan.grd"); 
-            Strcpy_STR(sGrid2, "thchan.grd"); 
+            Strcpy_STR(sGrid, "OCG\\Grids\\thchan.grd"); 
+            Strcpy_STR(sGrid2, "OCG\\Grids\\thchan.grd"); 
             Strcat_STR(sTitle, thChan);
             Strcat_STR(sTitle, _n(" from "));
             Strcat_STR(sTitle, _n(" from "));
@@ -301,8 +288,8 @@ real rAnn, rHeight, rWidth, rX, rY;
 
       }
       if(j == 3) { // Specific info for U
-            Strcpy_STR(sGrid, "uchan.grd"); 
-            Strcpy_STR(sGrid3, "uchan.grd"); 
+            Strcpy_STR(sGrid, "OCG\\Grids\\uchan.grd"); 
+            Strcpy_STR(sGrid3, "OCG\\Grids\\uchan.grd"); 
             Strcat_STR(sTitle, uChan);
             Strcat_STR(sTitle, _n(" from "));
             Strcat_STR(sTitle, _n(" from "));
@@ -451,12 +438,12 @@ real rAnn, rHeight, rWidth, rX, rY;
       //(It'd be better if I could do on Database and grid it, but learning docs would take a loooong time)
 
       // This creates ins and outs 
-      IMGIN1 = CreateFile_IMG(GS_DOUBLE, "kchan.grd(GRD;comp=none)", IMG_FILE_READONLY);
-      IMGIN2 = CreateFile_IMG(GS_DOUBLE, "thchan.grd(GRD;comp=none)", IMG_FILE_READONLY);
-      IMGIN3 = CreateFile_IMG(GS_DOUBLE, "uchan.grd(GRD;comp=none)", IMG_FILE_READONLY);
-      IMGOUT_THK = CreateOutFile_IMG(GS_DOUBLE, "thkratio.grd(GRD;comp=none)", IMGIN1);
-      IMGOUT_UK = CreateOutFile_IMG(GS_DOUBLE, "ukratio.grd(GRD;comp=none)", IMGIN1);
-      IMGOUT_UTH = CreateOutFile_IMG(GS_DOUBLE, "uthratio.grd(GRD;comp=none)", IMGIN1);
+      IMGIN1 = CreateFile_IMG(GS_DOUBLE, "OCG\\Grids\\kchan.grd(GRD;comp=none)", IMG_FILE_READONLY);
+      IMGIN2 = CreateFile_IMG(GS_DOUBLE, "OCG\\Grids\\thchan.grd(GRD;comp=none)", IMG_FILE_READONLY);
+      IMGIN3 = CreateFile_IMG(GS_DOUBLE, "OCG\\Grids\\uchan.grd(GRD;comp=none)", IMG_FILE_READONLY);
+      IMGOUT_THK = CreateOutFile_IMG(GS_DOUBLE, "OCG\\Grids\\thkratio.grd(GRD;comp=none)", IMGIN1);
+      IMGOUT_UK = CreateOutFile_IMG(GS_DOUBLE, "OCG\\Grids\\ukratio.grd(GRD;comp=none)", IMGIN1);
+      IMGOUT_UTH = CreateOutFile_IMG(GS_DOUBLE, "OCG\\Grids\\uthratio.grd(GRD;comp=none)", IMGIN1);
 
       // This inherits projections and other stuff 
       InheritIMG_IMG(IMGIN2, IMGIN1);
@@ -484,12 +471,12 @@ real rAnn, rHeight, rWidth, rX, rY;
       Destroy_IMG(IMGOUT_UK);
 
       if (iInteractive_SYS()) {
-             Strcpy_STR(sGrid4, "thkratio.grd"); 
-             Strcpy_STR(sGrid5, "ukratio.grd"); 
-             Strcpy_STR(sGrid6, "uthratio.grd"); 
-             iAddDocument_PROJ("thkratio.grd", "Grid", 1);
-             iAddDocument_PROJ("ukratio.grd", "Grid", 1);
-             iAddDocument_PROJ("uthratio.grd", "Grid", 1);
+             Strcpy_STR(sGrid4, "OCG\\Grids\\thkratio.grd"); 
+             Strcpy_STR(sGrid5, "OCG\\Grids\\ukratio.grd"); 
+             Strcpy_STR(sGrid6, "OCG\\Grids\\uthratio.grd"); 
+             iAddDocument_PROJ("OCG\\Grids\\thkratio.grd", "Grid", 1);
+             iAddDocument_PROJ("OCG\\Grids\\ukratio.grd", "Grid", 1);
+             iAddDocument_PROJ("OCG\\Grids\\uthratio.grd", "Grid", 1);
       }
     
 
@@ -500,7 +487,7 @@ real rAnn, rHeight, rWidth, rX, rY;
 
       // Let's always create a new map
       SetString_SYS("GAMAGEN", "NEW", "1");
-      Strcpy_STR(sMap, "OCG_gama.map");  // Map name
+      Strcpy_STR(sMap, "OCG\\Maps\\OCG_gama.map");  // Map name
 
 
       // Should we create a new map? Default is yes
@@ -626,6 +613,84 @@ real rAnn, rHeight, rWidth, rX, rY;
       // Destroy objs
       Destroy_AGG(Agg);
       Destroy_MVIEW(View);
+      UnLock_EMAP(EMap); 
+
+      //
+      // This is the export section
+      //
+
+      // Get current map and set views (pretty redundant, but this works)
+      EMap = Current_EMAP();
+      Map = Lock_EMAP(EMap);
+      View = Create_MVIEW(Map, "*Data", MVIEW_WRITEOLD);
+      BaseView = Create_MVIEW(Map, "*Base", MVIEW_WRITEOLD);
+      
+      // This will hide our colour legends
+      HideMarkedGroups_MVIEW(BaseView, 1);
+      Destroy_MVIEW(BaseView);
+      Destroy_MVIEW(View);
+
+      GetClassName_MAP(Map, "Data", sView);
+      View = Create_MVIEW(Map, sView, MVIEW_READ);
+      rMinLon = rGetReal_SYS("XYRANGE", "MIN_X");
+      rMinLat = rGetReal_SYS("XYRANGE", "MIN_Y");
+      rMaxLon = rGetReal_SYS("XYRANGE", "MAX_X");
+      rMaxLat = rGetReal_SYS("XYRANGE", "MAX_Y");
+      Destroy_MVIEW(View);
+      Strcpy_STR(sFormat, "GTIFF"); 
+
+
+      // This is our export loop for images
+      for(j = 0; j < maps+1; j++) {
+            View = Create_MVIEW(Map, sView, MVIEW_WRITEOLD);
+            if (j == 0) { 
+                  MoveGroupToFront_MVIEW(View, "OCG_totalcount");
+                  Strcpy_STR(sFile_export, "OCG\\Exports\\OCG_totalcount.tif");  
+                  Destroy_MVIEW(View);
+                  }
+            if (j == 1) {
+                  MoveGroupToFront_MVIEW(View, "OCG_kchan");
+                  Strcpy_STR(sFile_export, "OCG\\Exports\\OCG_kchan.tif"); 
+                  Destroy_MVIEW(View);
+                  }
+            if (j == 2) {
+                  MoveGroupToFront_MVIEW(View, "OCG_thchan");
+                  Strcpy_STR(sFile_export, "OCG\\Exports\\OCG_thchan.tif"); 
+                  Destroy_MVIEW(View);
+            }
+            if (j == 3) {
+                  MoveGroupToFront_MVIEW(View, "OCG_uchan");
+                  Strcpy_STR(sFile_export, "OCG\\Exports\\OCG_uchan.tif"); 
+                  Destroy_MVIEW(View);
+            }
+            if (j == 4) {
+                  MoveGroupToFront_MVIEW(View, "OCG_thkratio");
+                  Strcpy_STR(sFile_export, "OCG\\Exports\\OCG_thkratio.tif");
+                  Destroy_MVIEW(View); 
+            }
+            if (j == 5) {
+                  MoveGroupToFront_MVIEW(View, "OCG_ukratio");
+                  Strcpy_STR(sFile_export, "OCG\\Exports\\OCG_ukratio.tif"); 
+                  Destroy_MVIEW(View);
+            }
+            if (j == 6) {
+                  MoveGroupToFront_MVIEW(View, "OCG_uthratio");
+                  Strcpy_STR(sFile_export, "OCG\\Exports\\OCG_uthratio.tif"); 
+                  Destroy_MVIEW(View);
+            }
+            if (j == 7) {
+                  MoveGroupToFront_MVIEW(View, "OCG_ternary");
+                  Strcpy_STR(sFile_export, "OCG\\Exports\\OCG_ternary.tif"); 
+                  Destroy_MVIEW(View);
+            }
+            Progress_SYS(1);
+            //ExportAreaRaster_MAP(Map, sFile_export, sView, rMinLon, rMinLat, rMaxLon, rMaxLat, 0, 0, 300.0, 32, 0, sFormat, "" );
+            ExportAreaInView_MAP(Map, sFile_export, sView, rDUMMY, 300.0, 24, 2, rMinLon, rMinLat, rMaxLon, rMaxLat, sFormat, "");
+            Progress_SYS(0);
+      }
+
+      // Unlock map
+      UnLock_EMAP(EMap); 
 
       // Destroy IPJ and Unlock DB
       Destroy_IPJ(hIPJ);
