@@ -3,8 +3,6 @@ LEDIT,,,32,"TMI Channel",R,,,magchan
 EDIT ,,,32,"Grid cell size",,REAL
 EBUT,&OK,0
 EBUT,&Cancel,-1,CANCEL
-HBUT,&Help,magen_1
 
 RESOURCE,LIST,magchan
 
-RESOURCE,HELP,magen_1,nogx.hlp

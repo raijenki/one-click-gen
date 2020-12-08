@@ -6,7 +6,6 @@ LEDIT,,,32,"U Channel",R,,,uchan
 EDIT ,,,32,"Grid cell size",,REAL
 EBUT,&OK,0
 EBUT,&Cancel,-1,CANCEL
-HBUT,&Help,gamagen_1
 
 RESOURCE,LIST,tcchan
 
@@ -15,5 +14,3 @@ RESOURCE,LIST,kchan
 RESOURCE,LIST,thchan
 
 RESOURCE,LIST,uchan
-
-RESOURCE,HELP,gamagen_1,nogx.hlp
